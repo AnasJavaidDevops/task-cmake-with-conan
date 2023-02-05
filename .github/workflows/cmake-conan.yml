@@ -1,0 +1,80 @@
+name: cmake-conan
+
+# trigger for this workflow
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  job_1:
+    name: Build
+
+# Using a Matrix strategy to handle cross-compilation
+    strategy:
+      matrix:
+        runs-on: [ubuntu-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.runs-on }}
+
+    steps:
+      # CheckOut-repo
+    - uses: actions/checkout@v3
+    
+    - name: Conan-install
+      run: pip install conan
+      
+    - name: Conan-configuration
+      run: conan install --build=zlib/1.2.13 --build=bzip2/1.0.8 --build=expat/2.5.0 --build=openssl/1.1.1s --build=pcre/8.45 --build=poco/1.9.4 --build=sqlite3/3.39.4 ${{github.workspace}}
+      #run: conan install ${{github.workspace}}
+      
+    - name: Cmake-configuration
+      #run: cmake .. -DCMAKE_BUILD_TYPE=Release
+      run: cmake ${{github.workspace}} -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Compilation
+      run: cmake --build ${{github.workspace}}
+     
+    - name: Execution
+      run: bin/sleep
+
+    - name: Test
+      working-directory: ${{github.workspace}}
+      # Execute tests defined by the CMake configuration.
+      run: ctest -C ${{env.BUILD_TYPE}}
+
+      # Uploads artifacts
+    - uses: actions/upload-artifact@v3
+      with:
+        name: my-artifacts
+        path: ${{github.workspace}} # or path/to/artifact
+
+
+  job_2:
+    name: Test
+    needs: job_1
+    strategy:
+      matrix:
+        runs-on: [ubuntu-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.runs-on }}
+
+    steps:
+
+    - name: Download-build-artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: my-artifacts
+
+    - name: Test
+      working-directory: ${{github.workspace}}
+      # Execute tests defined by the CMake configuration.
+      run: ctest -C ${{env.BUILD_TYPE}}
+      
+      
