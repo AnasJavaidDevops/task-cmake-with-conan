@@ -1,5 +1,6 @@
-name: CMake
+name: cmake-conan
 
+# trigger for this workflow
 on:
   push:
     branches: [ "main" ]
@@ -7,31 +8,73 @@ on:
     branches: [ "main" ]
 
 env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
 
 jobs:
-  build:
-    # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
-    # You can convert this to a matrix build if you need cross-platform coverage.
-    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-latest
+  job_1:
+    name: Build
+
+# Using a Matrix strategy to handle cross-compilation
+    strategy:
+      matrix:
+        runs-on: [ubuntu-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
+      # CheckOut-repo
     - uses: actions/checkout@v3
+    
+    - name: Conan-install
+      run: pip install conan
+      
+    - name: Conan-configuration
+      run: conan install --build=zlib/1.2.13 --build=bzip2/1.0.8 --build=expat/2.5.0 --build=openssl/1.1.1s --build=pcre/8.45 --build=poco/1.9.4 --build=sqlite3/3.39.4 ${{github.workspace}}
+      #run: conan install ${{github.workspace}}
+      
+    - name: Cmake-configuration
+      #run: cmake .. -DCMAKE_BUILD_TYPE=Release
+      run: cmake ${{github.workspace}} -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
-    - name: Build
-      # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+    - name: Compilation
+      run: cmake --build ${{github.workspace}}
+     
+    - name: Execution
+      run: bin/sleep
 
     - name: Test
-      working-directory: ${{github.workspace}}/build
+      working-directory: ${{github.workspace}}
       # Execute tests defined by the CMake configuration.
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest -C ${{env.BUILD_TYPE}}
 
+      # Uploads artifacts
+    - uses: actions/upload-artifact@v3
+      with:
+        name: my-artifacts
+        path: ${{github.workspace}} # or path/to/artifact
+
+
+  job_2:
+    name: Test
+    needs: job_1
+    strategy:
+      matrix:
+        runs-on: [ubuntu-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.runs-on }}
+
+    steps:
+
+    - name: Download-build-artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: my-artifacts
+
+    - name: Test
+      working-directory: ${{github.workspace}}
+      # Execute tests defined by the CMake configuration.
+      run: ctest -C ${{env.BUILD_TYPE}}
+      
+      
